@@ -106,7 +106,7 @@ bool q_insert_tail(struct list_head *head, char *s)
  */
 element_t *q_remove_head(struct list_head *head, char *sp, size_t bufsize)
 {
-    if (!list_empty(head)) {
+    if (head && !list_empty(head) && sp) {
         struct list_head *h = head->next;
         element_t *e = container_of(h, element_t, list);
         strncpy(sp, e->value, bufsize - 1);
@@ -123,7 +123,7 @@ element_t *q_remove_head(struct list_head *head, char *sp, size_t bufsize)
  */
 element_t *q_remove_tail(struct list_head *head, char *sp, size_t bufsize)
 {
-    if (!list_empty(head)) {
+    if (head && !list_empty(head) && sp) {
         struct list_head *t = head->prev;
         element_t *e = container_of(t, element_t, list);
         strncpy(sp, e->value, bufsize - 1);
@@ -178,7 +178,7 @@ bool q_delete_mid(struct list_head *head)
         temp2 = temp2->prev;
     }
     list_del(temp1);
-    free(temp1);
+    q_release_element(container_of(temp1, element_t, list));
     return true;
 }
 
@@ -207,7 +207,7 @@ bool q_delete_dup(struct list_head *head)
                 flag = 1;
                 list_del(temp);
                 temp = temp->next;
-                free(tempElement);
+                q_release_element(tempElement);
             } else {
                 break;
             }
@@ -215,7 +215,7 @@ bool q_delete_dup(struct list_head *head)
         temphead = temphead->next;
         if (flag) {
             list_del(temphead->prev);
-            free(tempheadElement);
+            q_release_element(tempheadElement);
         }
     }
     return true;
@@ -240,6 +240,7 @@ void q_swap(struct list_head *head)
             temp2->next = temp1;
             temp2->prev = temp3;
             temp3->next = temp2;
+            temp1->next->prev = temp1;
             if (temp1->next != head && temp1->next->next != head) {
                 temp3 = temp1;
                 temp1 = temp1->next;
@@ -267,6 +268,8 @@ void swap_two_node(struct list_head **node1, struct list_head **node2)
 }
 void q_reverse(struct list_head *head)
 {
+    if (!head || list_empty(head) || list_is_singular(head))
+        return;
     struct list_head *temp = head;
     swap_two_node(&temp->next, &temp->prev);
     list_for_each (temp, head) {
@@ -281,19 +284,25 @@ void q_reverse(struct list_head *head)
  */
 void q_sort(struct list_head *head)
 {
+    if (!head || list_empty(head) || list_is_singular(head))
+        return;
     // bubble sort
     struct list_head *i;
-    list_for_each (i, head) {
+    for (i = head; i != head->next; i = i->prev) {
         struct list_head *j;
-        for (j = i->next; j != head; j = j->next) {
+        for (j = head->next->next; j != i; j = j->next) {
             element_t *e1 = container_of(j, element_t, list);
             element_t *e2 = container_of(j->prev, element_t, list);
-            if (strcmp(e1->value, e2->value) > 0) {
+            if (strcmp(e1->value, e2->value) < 0) {
+                // printf("%s %s\n",e2->value,e1->value);
                 struct list_head *temp = j->prev;
                 j->prev = temp->prev;
                 temp->next = j->next;
                 j->next = temp;
                 temp->prev = j;
+                temp->next->prev = temp;
+                j->prev->next = j;
+                // i=i->next;
                 j = j->next;
             }
         }
