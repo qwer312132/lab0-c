@@ -1,9 +1,9 @@
+#include "queue.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include "harness.h"
-#include "queue.h"
 
 /* Notice: sometimes, Cppcheck would find the potential NULL pointer bugs,
  * but some of them cannot occur. You can suppress them by adding the
@@ -104,14 +104,16 @@ bool q_insert_tail(struct list_head *head, char *s)
  * REF:
  * https://english.stackexchange.com/questions/52508/difference-between-delete-and-remove
  */
+#define min(a, b) (((a) < (b)) ? (a) : (b))
 element_t *q_remove_head(struct list_head *head, char *sp, size_t bufsize)
 {
     if (head && !list_empty(head) && sp) {
         struct list_head *h = head->next;
         element_t *e = container_of(h, element_t, list);
-        strncpy(sp, e->value, bufsize - 1);
+        int L = min(strlen(e->value), bufsize - 1);
+        strncpy(sp, e->value, L);
         list_del(h);
-        sp[bufsize - 1] = '\0';
+        sp[L] = '\0';
         return e;
     }
     return NULL;
@@ -126,9 +128,10 @@ element_t *q_remove_tail(struct list_head *head, char *sp, size_t bufsize)
     if (head && !list_empty(head) && sp) {
         struct list_head *t = head->prev;
         element_t *e = container_of(t, element_t, list);
-        strncpy(sp, e->value, bufsize - 1);
+        int L = min(strlen(e->value), bufsize - 1);
+        strncpy(sp, e->value, L);
         list_del(t);
-        sp[bufsize - 1] = '\0';
+        sp[L] = '\0';
         return e;
     }
     return NULL;
@@ -282,29 +285,67 @@ void q_reverse(struct list_head *head)
  * No effect if q is NULL or empty. In addition, if q has only one
  * element, do nothing.
  */
+struct list_head *merge(struct list_head *l, struct list_head *r)
+{
+    struct list_head *head = NULL;
+    struct list_head **indirect = &head;
+    while (l && r) {
+        element_t *elementl = container_of(l, element_t, list);
+        element_t *elementr = container_of(r, element_t, list);
+        if (strcmp(elementl->value, elementr->value) < 0) {
+            *indirect = l;
+            l = l->next;
+
+        } else {
+            *indirect = r;
+            r = r->next;
+        }
+        indirect = &(*indirect)->next;
+    }
+    *indirect = (struct list_head *) ((uintptr_t) l | (uintptr_t) r);
+    return head;
+}
+struct list_head *mergesort(struct list_head *l, struct list_head *r)
+{
+    struct list_head *tortoise = l;
+    struct list_head *hare = l;
+    if (l == r) {
+        l->next = NULL;
+        return l;
+    } else if (l->next == r) {
+        element_t *left = container_of(l, element_t, list);
+        element_t *right = container_of(r, element_t, list);
+        if (strcmp(left->value, right->value) > 0) {
+            l->next = NULL;
+            r->next = l;
+            return r;
+        } else {
+            r->next = NULL;
+            return l;
+        }
+    }
+    while (hare->next != NULL && hare->next->next != NULL && hare->next != r &&
+           hare->next->next != r) {
+        hare = hare->next->next;
+        tortoise = tortoise->next;
+    }
+    struct list_head *list1, *list2;
+    struct list_head *temp = tortoise->next;
+    list1 = mergesort(l, tortoise);
+    list2 = mergesort(temp, r);
+    return merge(list1, list2);
+}
 void q_sort(struct list_head *head)
 {
     if (!head || list_empty(head) || list_is_singular(head))
         return;
-    // bubble sort
-    struct list_head *i;
-    for (i = head; i != head->next; i = i->prev) {
-        struct list_head *j;
-        for (j = head->next->next; j != i; j = j->next) {
-            element_t *e1 = container_of(j, element_t, list);
-            element_t *e2 = container_of(j->prev, element_t, list);
-            if (strcmp(e1->value, e2->value) < 0) {
-                // printf("%s %s\n",e2->value,e1->value);
-                struct list_head *temp = j->prev;
-                j->prev = temp->prev;
-                temp->next = j->next;
-                j->next = temp;
-                temp->prev = j;
-                temp->next->prev = temp;
-                j->prev->next = j;
-                // i=i->next;
-                j = j->next;
-            }
-        }
+    head->prev->next = NULL;
+    head->next = mergesort(head->next, head->prev);
+    struct list_head *node = head;
+    while (node->next) {
+        node->next->prev = node;
+        node = node->next;
     }
+    node->next = head;
+    head->prev = node;
 }
